@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Happy+Monkey&display=swap');
+
+html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; 
+    font-family: 'Happy Monkey', system-ui, sans-serif;
+    background-color: #8bccd8;
+    color: #201d4c;
+    touch-action: manipulation;
+}
+
+.cloud-float {
+    animation: float 4s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+}
+
+button {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.grid-wrapper {
+    aspect-ratio: 1 / 1;
+    max-height: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+}
+@media (max-aspect-ratio: 1/1) {
+    .grid-wrapper {
+        width: 100%;
+        height: auto;
+    }
+}
+@media (min-aspect-ratio: 1/1) {
+    .grid-wrapper {
+        height: 100%;
+        width: auto;
+    }
+}
