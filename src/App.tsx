@@ -2,12 +2,33 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SVGS } from './SVGs';
 import { playSound } from './audio';
 import { getMapForLevel, generateWordMap } from './gameData';
-import { Difficulty, ScreenState, GameMode, GameStatus, Command, MapData, RobotState, AlienState, LetterState } from './types';
+import { Difficulty, MapSize, ScreenState, GameMode, GameStatus, Command, MapData, RobotState, AlienState, LetterState } from './types';
 import { Settings, Play, PenTool, Car, XCircle, RotateCcw, Trash2, Check, ArrowLeft } from 'lucide-react';
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenState>('start');
   const [difficulty, setDifficulty] = useState<Difficulty>('makkelijk');
+  const [mapSize, setMapSize] = useState<MapSize>(() => {
+    const saved = localStorage.getItem('mars_mapsize');
+    return saved ? parseInt(saved) as MapSize : 5;
+  });
+  
+  // Save map size when changed
+  useEffect(() => {
+    localStorage.setItem('mars_mapsize', mapSize.toString());
+  }, [mapSize]);
+
+  // Custom obstacles configuration
+  const [useCustomObs, setUseCustomObs] = useState<boolean>(() => localStorage.getItem('mars_useCustomObs') === 'true');
+  const [customObsCount, setCustomObsCount] = useState<number>(() => parseInt(localStorage.getItem('mars_customObsCount') || '3'));
+  const [customAlienCount, setCustomAlienCount] = useState<number>(() => parseInt(localStorage.getItem('mars_customAlienCount') || '0'));
+
+  useEffect(() => {
+     localStorage.setItem('mars_useCustomObs', String(useCustomObs));
+     localStorage.setItem('mars_customObsCount', String(customObsCount));
+     localStorage.setItem('mars_customAlienCount', String(customAlienCount));
+  }, [useCustomObs, customObsCount, customAlienCount]);
+
   const [gameMode, setGameMode] = useState<GameMode>('mars');
   const [wordListStr, setWordListStr] = useState<string>(() => {
     const saved = localStorage.getItem('mars_words');
@@ -174,17 +195,19 @@ export default function App() {
     setIsCustomMode(!!cMap);
     setLevel(lvl);
     
+    const customConfig = useCustomObs ? { obs: customObsCount, aliens: customAlienCount } : null;
+
     let mapData: MapData;
     let word = '';
     if (cMap) {
       mapData = JSON.parse(JSON.stringify(cMap));
     } else {
       if (mode === 'mars') {
-        mapData = getMapForLevel(lvl, difficulty);
+        mapData = getMapForLevel(lvl, difficulty, mapSize, customConfig);
       } else {
         const words = wordListStr.split(',').map(w => w.trim()).filter(w => w);
         word = words.length > 0 ? words[Math.floor(Math.random() * words.length)].toUpperCase() : 'AUTO';
-        mapData = generateWordMap(word, difficulty, lvl);
+        mapData = generateWordMap(word, difficulty, lvl, mapSize, customConfig);
       }
     }
 
@@ -207,7 +230,7 @@ export default function App() {
 
   const openBuilder = () => {
     playSound('click');
-    let size = difficulty === 'makkelijk' ? 5 : difficulty === 'gemiddeld' ? 7 : 9;
+    let size = mapSize;
     setCustomMap({
         size: size,
         start: {x: 0, y: size - 1, dir: 0},
@@ -223,7 +246,15 @@ export default function App() {
   return (
     <div className="w-full h-full relative font-sans">
       {screen === 'start' && <StartScreen onStartMars={() => startLevel(1, 'mars')} onStartAuto={() => startLevel(1, 'auto')} onSettings={() => showScreen('settings')} />}
-      {screen === 'settings' && <SettingsScreen diff={difficulty} setDiff={setDifficulty} wordListStr={wordListStr} setWordListStr={setWordListStr} showGhost={showGhost} toggleGhost={toggleGhost} onBack={() => showScreen('start')} onBuilder={openBuilder} />}
+      {screen === 'settings' && <SettingsScreen 
+           diff={difficulty} setDiff={setDifficulty} 
+           mapSize={mapSize} setMapSize={setMapSize} 
+           useCustomObs={useCustomObs} setUseCustomObs={setUseCustomObs}
+           customObsCount={customObsCount} setCustomObsCount={setCustomObsCount}
+           customAlienCount={customAlienCount} setCustomAlienCount={setCustomAlienCount}
+           wordListStr={wordListStr} setWordListStr={setWordListStr} 
+           showGhost={showGhost} toggleGhost={toggleGhost} 
+           onBack={() => showScreen('start')} onBuilder={openBuilder} />}
       {screen === 'builder' && <BuilderScreen customMap={customMap!} setCustomMap={setCustomMap} tool={builderTool} setTool={setBuilderTool} onBack={() => showScreen('settings')} onPlay={() => startLevel(1, 'mars', customMap!)} />}
       {screen === 'game' && <GameScreen 
           mapData={currentMap!} robot={robot} aliens={aliens} letters={letters} 
@@ -282,19 +313,67 @@ function StartScreen({onStartMars, onStartAuto, onSettings}:any) {
   );
 }
 
-function SettingsScreen({diff, setDiff, wordListStr, setWordListStr, showGhost, toggleGhost, onBack, onBuilder}:any) {
+function SettingsScreen({
+   diff, setDiff, mapSize, setMapSize, 
+   useCustomObs, setUseCustomObs, customObsCount, setCustomObsCount, customAlienCount, setCustomAlienCount,
+   wordListStr, setWordListStr, showGhost, toggleGhost, onBack, onBuilder
+}:any) {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white/90 backdrop-blur-sm border-[5px] border-[#201d4c] rounded-[2rem] p-6 max-w-md w-full shadow-2xl my-auto">
         <h2 className="text-2xl font-bold mb-4 text-center text-[#201d4c]">Instellingen</h2>
         
         <div className="flex flex-col gap-3 mb-6">
-          <label className="font-bold text-sm text-[#201d4c] uppercase tracking-wider">Moeilijkheidsgraad</label>
-          {(['makkelijk', 'gemiddeld', 'moeilijk'] as Difficulty[]).map(d => (
-            <button key={d} onClick={() => setDiff(d)} className={`border-[3px] border-[#201d4c] text-lg py-2 px-4 rounded-xl font-bold flex justify-between items-center transition-all ${diff === d ? 'ring-[4px] ring-[#201d4c] scale-105 border-white ' + (d==='makkelijk'?'bg-green-400':d==='gemiddeld'?'bg-amber-400':'bg-red-400') : 'bg-gray-100 opacity-80'}`}>
-              {d.charAt(0).toUpperCase() + d.slice(1)} {diff === d && <Check size={20} strokeWidth={4}/>}
-            </button>
-          ))}
+          <label className="font-bold text-sm text-[#201d4c] uppercase tracking-wider">Grootte van de mat</label>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+               { val: 5, label: 'Klein' },
+               { val: 7, label: 'Middel' },
+               { val: 9, label: 'Groot' }
+            ].map(s => (
+               <button key={s.val} onClick={() => setMapSize(s.val)} className={`border-[3px] border-[#201d4c] py-2 rounded-xl font-bold flex flex-col items-center justify-center transition-all ${mapSize === s.val ? 'bg-sky-400 text-white ring-[4px] ring-[#201d4c] scale-105 border-white' : 'bg-gray-100 opacity-80 text-[#201d4c]'}`}>
+                 <span>{s.label}</span>
+                 <span className="text-xs opacity-80">{s.val}x{s.val}</span>
+               </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 mb-6">
+          <div className="flex items-center justify-between">
+            <label className="font-bold text-sm text-[#201d4c] uppercase tracking-wider">Hindernissen & UFO's</label>
+            <div className="flex bg-gray-200 rounded-lg p-1 text-xs font-bold border-[2px] border-gray-300">
+              <button onClick={() => setUseCustomObs(false)} className={`px-2 py-1 rounded-md transition-all ${!useCustomObs ? 'bg-white shadow-sm text-sky-600' : 'text-gray-500 hover:text-gray-700'}`}>Groeit per Missie</button>
+              <button onClick={() => setUseCustomObs(true)} className={`px-2 py-1 rounded-md transition-all ${useCustomObs ? 'bg-white shadow-sm text-sky-600' : 'text-gray-500 hover:text-gray-700'}`}>Vast Aantal</button>
+            </div>
+          </div>
+          
+          {!useCustomObs ? (
+              <div className="flex flex-col gap-2">
+                {(['makkelijk', 'gemiddeld', 'moeilijk'] as Difficulty[]).map(d => (
+                  <button key={d} onClick={() => setDiff(d)} className={`border-[3px] border-[#201d4c] text-lg py-2 px-4 rounded-xl font-bold flex justify-between items-center transition-all ${diff === d ? 'ring-[4px] ring-[#201d4c] scale-105 border-white ' + (d==='makkelijk'?'bg-green-400':d==='gemiddeld'?'bg-amber-400':'bg-red-400') : 'bg-gray-100 opacity-80'}`}>
+                    {d.charAt(0).toUpperCase() + d.slice(1)} {diff === d && <Check size={20} strokeWidth={4}/>}
+                  </button>
+                ))}
+              </div>
+          ) : (
+              <div className="bg-sky-50 border-[3px] border-sky-300 rounded-xl p-4 flex flex-col gap-5">
+                 <label className="flex flex-col gap-2">
+                   <div className="flex justify-between text-sm font-bold text-[#201d4c]">
+                     <span>Rotsen & Kraters</span>
+                     <span className="bg-white px-2 py-0.5 rounded-md border-2 border-[#201d4c]/20">{customObsCount}</span>
+                   </div>
+                   <input type="range" min="0" max={Math.floor(mapSize*mapSize*0.4)} value={Math.min(customObsCount, Math.floor(mapSize*mapSize*0.4))} onChange={e => setCustomObsCount(Number(e.target.value))} className="w-full h-2 bg-sky-200 rounded-lg appearance-none cursor-pointer accent-sky-600" />
+                 </label>
+                 <label className="flex flex-col gap-2">
+                   <div className="flex justify-between text-sm font-bold text-[#201d4c]">
+                     <span>UFO's (Bewegend)</span>
+                     <span className="bg-white px-2 py-0.5 rounded-md border-2 border-[#201d4c]/20">{customAlienCount}</span>
+                   </div>
+                   <input type="range" min="0" max={5} value={customAlienCount} onChange={e => setCustomAlienCount(Number(e.target.value))} className="w-full h-2 bg-sky-200 rounded-lg appearance-none cursor-pointer accent-sky-600" />
+                 </label>
+              </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2 mb-6">

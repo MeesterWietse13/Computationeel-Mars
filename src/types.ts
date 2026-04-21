@@ -1,5 +1,11 @@
 export type Difficulty = 'makkelijk' | 'gemiddeld' | 'moeilijk';
+export type MapSize = 5 | 7 | 9;
 export type ScreenState = 'start' | 'settings' | 'builder' | 'game';
+
+export interface CustomConfig {
+  obs: number;
+  aliens: number;
+}
 export type GameMode = 'mars' | 'auto';
 export type Direction = 0 | 1 | 2 | 3; // 0=N, 1=E, 2=S, 3=W
 export type GameStatus = 'idle' | 'running' | 'won' | 'lost_crash' | 'lost_bounds' | 'lost_incomplete' | 'lost_alien';

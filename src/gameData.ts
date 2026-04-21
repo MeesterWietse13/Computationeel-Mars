@@ -47,28 +47,52 @@ function isPathValid(size: number, start: Point, target: Point, obstacles: Point
   return false;
 }
 
-export function getMapForLevel(lvl: number, diff: Difficulty): MapData {
-  let predef = MAPS[diff];
-  if (lvl <= predef.length) return predef[lvl - 1];
-  
-  let size = diff === 'makkelijk' ? 5 : diff === 'gemiddeld' ? 7 : 9;
+export function getMapForLevel(lvl: number, diff: Difficulty, size: number, customConfig?: {obs: number, aliens: number} | null): MapData {
   let start = {x: 0, y: size-1, dir: 0 as Direction};
-  let target = {x: Math.floor(Math.random() * size), y: Math.floor(Math.random() * Math.max(1, size/2))}; 
-  if (target.x === start.x && target.y === start.y) target.x = size - 1;
+  let target = {x: size-1, y: 0};
+  
+  let obCount = 0; let alCount = 0;
+  
+  if (customConfig) {
+      obCount = customConfig.obs;
+      alCount = customConfig.aliens;
+  } else {
+      // Linear scaling multiplier: 1 for 5x5, 1.4 for 7x7, 1.8 for 9x9 -> prevents overcrowded boards
+      const sizeMult = size / 5; 
+      
+      if (diff === 'makkelijk') {
+          obCount = lvl <= 2 ? 0 : Math.floor((lvl - 2) * sizeMult); 
+          alCount = lvl >= 5 ? Math.floor(1 * sizeMult) : 0; 
+      } else if (diff === 'gemiddeld') {
+          obCount = Math.floor((1 + lvl * 0.7) * sizeMult);
+          alCount = lvl >= 3 ? Math.floor(1 * sizeMult) : 0; 
+      } else {
+          obCount = Math.floor((3 + lvl * 1.5) * sizeMult);
+          alCount = Math.floor((1 + Math.floor(lvl / 2)) * sizeMult);
+      }
+  }
 
-  let numObstacles = diff === 'makkelijk' ? 4 : diff === 'gemiddeld' ? 10 : 20;
+  // Veiligheidslimiet: maximaal ~40% van het bord vullen om onoplosbare levels te voorkomen
+  const maxSafelyFree = Math.floor(size * size * 0.4);
+  obCount = Math.min(obCount, maxSafelyFree);
   
   for(let attempt = 0; attempt < 50; attempt++) {
       let obstacles: Point[] = [];
-      for(let i=0; i<numObstacles; i++) {
-          let ox = Math.floor(Math.random() * size);
-          let oy = Math.floor(Math.random() * size);
-          if ((ox === start.x && oy === start.y) || (ox === target.x && oy === target.y)) continue;
-          obstacles.push({x: ox, y: oy});
+      let allSpaces: Point[] = [];
+      for (let x=0; x<size; x++) {
+          for (let y=0; y<size; y++) {
+              if ((x === start.x && y === start.y) || (x === target.x && y === target.y)) continue;
+              allSpaces.push({x, y});
+          }
+      }
+      allSpaces.sort(() => Math.random() - 0.5);
+
+      for(let i=0; i<obCount; i++) {
+          if (allSpaces.length > 0) obstacles.push(allSpaces.pop()!);
       }
 
       let randomAliens: AlienState[] = [];
-      if (Math.random() > 0.4 && diff !== 'makkelijk') {
+      for(let i=0; i<alCount; i++) {
           let ax = Math.floor(Math.random() * (size - 2)) + 1;
           let ay = Math.floor(Math.random() * (size - 2)) + 1;
           if (!obstacles.some(o => o.x === ax && o.y === ay) && !(target.x === ax && target.y === ay) && !(start.x === ax && start.y === ay)) {
@@ -116,23 +140,31 @@ function areAllLettersReachable(size: number, start: Point, letters: LetterState
   return true;
 }
 
-export function generateWordMap(word: string, difficulty: Difficulty, level: number = 1): MapData {
-  let size = difficulty === 'makkelijk' ? 5 : difficulty === 'gemiddeld' ? 7 : 9;
+export function generateWordMap(word: string, difficulty: Difficulty, level: number = 1, size: number, customConfig?: {obs: number, aliens: number} | null): MapData {
   let start = {x: 0, y: size-1, dir: 0 as Direction};
   
-  let numObstacles = 0;
-  let numAliens = 0;
+  let numObstacles = 0; let numAliens = 0;
   
-  if (difficulty === 'makkelijk') {
-      numObstacles = Math.min(2, level - 1); 
-      numAliens = level >= 4 ? 1 : 0; 
-  } else if (difficulty === 'gemiddeld') {
-      numObstacles = Math.min(5, 1 + level);
-      numAliens = level >= 2 ? (level >= 5 ? 2 : 1) : 0; 
+  if (customConfig) {
+      numObstacles = customConfig.obs;
+      numAliens = customConfig.aliens;
   } else {
-      numObstacles = Math.min(10, 3 + level * 2);
-      numAliens = Math.min(3, 1 + Math.floor(level/2));
+      const sizeMult = size / 5;
+      
+      if (difficulty === 'makkelijk') {
+          numObstacles = level <= 2 ? 0 : Math.floor((level - 2) * sizeMult); 
+          numAliens = level >= 5 ? Math.floor(1 * sizeMult) : 0; 
+      } else if (difficulty === 'gemiddeld') {
+          numObstacles = Math.floor((1 + level * 0.7) * sizeMult);
+          numAliens = level >= 3 ? Math.floor(1 * sizeMult) : 0; 
+      } else {
+          numObstacles = Math.floor((3 + level * 1.5) * sizeMult);
+          numAliens = Math.floor((1 + Math.floor(level / 2)) * sizeMult);
+      }
   }
+
+  const maxSafelyFree = Math.floor(size * size * 0.4);
+  numObstacles = Math.min(numObstacles, maxSafelyFree);
   
   for(let attempt = 0; attempt < 50; attempt++) {
       let obstacles: Point[] = [];
