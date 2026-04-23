@@ -48,8 +48,10 @@ function isPathValid(size: number, start: Point, target: Point, obstacles: Point
 }
 
 export function getMapForLevel(lvl: number, diff: Difficulty, size: number, customConfig?: {obs: number, aliens: number} | null): MapData {
-  let start = {x: 0, y: size-1, dir: 0 as Direction};
-  let target = {x: size-1, y: 0};
+  let startX = Math.floor(Math.random() * size);
+  let targetX = Math.floor(Math.random() * size);
+  let start = {x: startX, y: size-1, dir: 0 as Direction};
+  let target = {x: targetX, y: 0};
   
   let obCount = 0; let alCount = 0;
   
@@ -76,19 +78,40 @@ export function getMapForLevel(lvl: number, diff: Difficulty, size: number, cust
   const maxSafelyFree = Math.floor(size * size * 0.4);
   obCount = Math.min(obCount, maxSafelyFree);
   
+  const minX = Math.min(start.x, target.x);
+  const maxX = Math.max(start.x, target.x);
+  const minY = 0;
+  const maxY = size - 1;
+
   for(let attempt = 0; attempt < 50; attempt++) {
       let obstacles: Point[] = [];
-      let allSpaces: Point[] = [];
+      let boundingBoxSpaces: Point[] = [];
+      let otherSpaces: Point[] = [];
+
       for (let x=0; x<size; x++) {
           for (let y=0; y<size; y++) {
               if ((x === start.x && y === start.y) || (x === target.x && y === target.y)) continue;
-              allSpaces.push({x, y});
+              
+              if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+                  boundingBoxSpaces.push({x, y});
+              } else {
+                  otherSpaces.push({x, y});
+              }
           }
       }
-      allSpaces.sort(() => Math.random() - 0.5);
-
-      for(let i=0; i<obCount; i++) {
-          if (allSpaces.length > 0) obstacles.push(allSpaces.pop()!);
+      
+      boundingBoxSpaces.sort(() => Math.random() - 0.5);
+      
+      if (obCount > 0) {
+          if (boundingBoxSpaces.length > 0) {
+              // Zorg dat er minstens 1 hindernis de kortste of logische route in de weg staat
+              obstacles.push(boundingBoxSpaces.pop()!);
+          }
+          
+          let allSpaces = [...boundingBoxSpaces, ...otherSpaces].sort(() => Math.random() - 0.5);
+          for(let i=1; i<obCount; i++) {
+              if (allSpaces.length > 0) obstacles.push(allSpaces.pop()!);
+          }
       }
 
       let randomAliens: AlienState[] = [];
@@ -141,7 +164,8 @@ function areAllLettersReachable(size: number, start: Point, letters: LetterState
 }
 
 export function generateWordMap(word: string, difficulty: Difficulty, level: number = 1, size: number, customConfig?: {obs: number, aliens: number} | null): MapData {
-  let start = {x: 0, y: size-1, dir: 0 as Direction};
+  let startX = Math.floor(Math.random() * size);
+  let start = {x: startX, y: size-1, dir: 0 as Direction};
   
   let numObstacles = 0; let numAliens = 0;
   
