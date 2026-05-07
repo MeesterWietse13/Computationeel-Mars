@@ -3,7 +3,7 @@ import { SVGS } from './SVGs';
 import { playSound } from './audio';
 import { getMapForLevel, generateWordMap } from './gameData';
 import { Difficulty, MapSize, ScreenState, GameMode, GameStatus, Command, MapData, RobotState, AlienState, LetterState } from './types';
-import { Settings, Play, PenTool, Car, XCircle, RotateCcw, Trash2, Check, ArrowLeft } from 'lucide-react';
+import { Settings, Play, PenTool, Car, XCircle, RotateCcw, Trash2, Check, ArrowLeft, Ghost } from 'lucide-react';
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenState>('start');
@@ -253,14 +253,13 @@ export default function App() {
            customObsCount={customObsCount} setCustomObsCount={setCustomObsCount}
            customAlienCount={customAlienCount} setCustomAlienCount={setCustomAlienCount}
            wordListStr={wordListStr} setWordListStr={setWordListStr} 
-           showGhost={showGhost} toggleGhost={toggleGhost} 
            onBack={() => showScreen('start')} onBuilder={openBuilder} />}
       {screen === 'builder' && <BuilderScreen customMap={customMap!} setCustomMap={setCustomMap} tool={builderTool} setTool={setBuilderTool} onBack={() => showScreen('settings')} onPlay={() => startLevel(1, 'mars', customMap!)} />}
       {screen === 'game' && <GameScreen 
           mapData={currentMap!} robot={robot} aliens={aliens} letters={letters} 
           commands={commands} isExecuting={isExecuting} executionIndex={executionIndex} gameState={gameState}
           gameMode={gameMode} targetWord={targetWord} level={level} isCustomMode={isCustomMode} diff={difficulty}
-          showGhost={showGhost}
+          showGhost={showGhost} onToggleGhost={toggleGhost}
           onAddCommand={c => { if(!isExecuting) { playSound('click'); setCommands([...commands, c]); } }}
           onRemoveCommand={i => { if(!isExecuting) { playSound('click'); setCommands(commands.filter((_,idx)=>idx!==i)); } }}
           onPlay={() => { if(!isExecuting && commands.length > 0) { playSound('start'); setRobot(JSON.parse(JSON.stringify(checkpoint!.robot))); setAliens(JSON.parse(JSON.stringify(checkpoint!.aliens))); setLetters(JSON.parse(JSON.stringify(checkpoint!.letters))); setExecutionIndex(0); setGameState('running'); setIsExecuting(true); } }}
@@ -316,7 +315,7 @@ function StartScreen({onStartMars, onStartAuto, onSettings}:any) {
 function SettingsScreen({
    diff, setDiff, mapSize, setMapSize, 
    useCustomObs, setUseCustomObs, customObsCount, setCustomObsCount, customAlienCount, setCustomAlienCount,
-   wordListStr, setWordListStr, showGhost, toggleGhost, onBack, onBuilder
+   wordListStr, setWordListStr, onBack, onBuilder
 }:any) {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center p-4 overflow-y-auto">
@@ -384,20 +383,6 @@ function SettingsScreen({
             className="w-full h-24 p-3 border-[3px] border-[#201d4c] rounded-xl font-mono text-sm resize-none focus:outline-none focus:ring-4 focus:ring-amber-300"
             placeholder="KAT, BOOM, APPEL"
           />
-        </div>
-
-        <div className="flex flex-col gap-2 mb-6">
-            <label className="font-bold text-sm text-[#201d4c] uppercase tracking-wider">Hulp</label>
-            <label className="flex items-center justify-between p-3 border-[3px] border-[#201d4c] rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
-               <div className="flex flex-col">
-                  <span className="font-bold text-[#201d4c]">Spook-auto tonen</span>
-                  <span className="text-[10px] opacity-70">Toont een half doorzichtige wagen op de eindbestemming</span>
-               </div>
-               <div className={`w-12 h-6 rounded-full border-[2px] border-[#201d4c] p-0.5 transition-colors ${showGhost ? 'bg-green-400' : 'bg-gray-300'}`}>
-                  <div className={`w-4 h-4 bg-white border border-[#201d4c] rounded-full transition-transform ${showGhost ? 'translate-x-6' : 'translate-x-0'}`}></div>
-               </div>
-               <input type="checkbox" checked={showGhost} onChange={e => toggleGhost(e.target.checked)} className="hidden"/>
-            </label>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -489,15 +474,17 @@ function ToolBtn({id, t, onClick, svg, name, label}:any) {
   );
 }
 
-function GameScreen({mapData, robot, aliens, letters, commands, isExecuting, executionIndex, gameState, gameMode, targetWord, level, diff, isCustomMode, showGhost, onAddCommand, onRemoveCommand, onPlay, onStop, onClear, onNext, onRetry, onBack, onRebuild}:any) {
+function GameScreen({mapData, robot, aliens, letters, commands, isExecuting, executionIndex, gameState, gameMode, targetWord, level, diff, isCustomMode, showGhost, onToggleGhost, onAddCommand, onRemoveCommand, onPlay, onStop, onClear, onNext, onRetry, onBack, onRebuild}:any) {
   
   const size = mapData.size;
   const collectedCount = letters.filter((l:LetterState) => l.collected).length;
 
   let ghostRobot = null;
+  let ghostPath: {x:number, y:number}[] = [];
   const showGhostFeature = showGhost && !isExecuting && commands.length > 0;
   if (showGhostFeature) {
       ghostRobot = { ...robot };
+      ghostPath = [{ x: robot.x, y: robot.y }];
       for (const cmd of commands) {
           if (cmd === 'LEFT') ghostRobot.dir -= 1;
           else if (cmd === 'RIGHT') ghostRobot.dir += 1;
@@ -511,6 +498,7 @@ function GameScreen({mapData, robot, aliens, letters, commands, isExecuting, exe
               if (nx >= 0 && nx < size && ny >= 0 && ny < size && !mapData.obstacles.some((o:any) => o.x === nx && o.y === ny)) {
                   ghostRobot.x = nx;
                   ghostRobot.y = ny;
+                  ghostPath.push({ x: nx, y: ny });
               }
           }
       }
@@ -524,7 +512,14 @@ function GameScreen({mapData, robot, aliens, letters, commands, isExecuting, exe
           <h2 className="text-xl font-extrabold text-[#201d4c] leading-none mb-1">{isCustomMode?'Eigen Map':gameMode==='mars'?`Missie ${level}`:`Woorden Auto`}</h2>
           <span className="text-[10px] font-bold opacity-80 uppercase tracking-widest">{isCustomMode?'MAATWERK':diff}</span>
         </div>
-        <div className="opacity-0 pointer-events-none">Placeholder</div>
+        <button 
+          onClick={() => { playSound('click'); onToggleGhost(!showGhost); }} 
+          className={`px-3 py-1.5 border-[3px] border-[#201d4c] rounded-lg shadow-[0_3px_0_#201d4c] active:translate-y-1 transition-all flex items-center gap-2 font-bold text-xs ${showGhost ? 'bg-green-400 text-white' : 'bg-gray-200 text-[#201d4c]'}`}
+          title="Toon spook-auto"
+        >
+          <Ghost size={18} />
+          <span>Spookauto</span>
+        </button>
       </div>
 
       {gameMode === 'auto' && (
@@ -542,7 +537,7 @@ function GameScreen({mapData, robot, aliens, letters, commands, isExecuting, exe
 
       <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0">
         <div className="flex-1 min-h-0 flex items-center justify-center relative bg-[#a8dded] rounded-3xl border-[4px] border-[#201d4c]/10 p-2 shadow-inner">
-          <div className="grid-wrapper bg-[#c46f4d] border-[6px] border-[#201d4c] rounded-3xl relative shadow-xl overflow-hidden" style={{maxWidth: '600px', maxHeight: '600px'}}>
+          <div className="grid-wrapper bg-[#c46f4d] border-[6px] border-[#201d4c] rounded-3xl relative shadow-xl" style={{maxWidth: '600px', maxHeight: '600px'}}>
             <div className="absolute inset-0 grid" style={{gridTemplateColumns:`repeat(${size},1fr)`, gridTemplateRows:`repeat(${size},1fr)`}}>
               {Array.from({length: size*size}).map((_, i) => {
                 const x = i%size; const y = Math.floor(i/size);
@@ -574,9 +569,27 @@ function GameScreen({mapData, robot, aliens, letters, commands, isExecuting, exe
                 <div className="w-[85%] h-[85%] transition-transform duration-500" style={{transform: `rotate(${robot.dir*90}deg)`}}>{gameMode === 'mars' ? SVGS.rover : SVGS.car}</div>
             </div>
 
+            {ghostPath.length > 1 && (
+               <svg className="absolute inset-0 pointer-events-none z-10 w-full h-full" viewBox={`0 0 ${size} ${size}`}>
+                  <polyline
+                    points={ghostPath.map(p => `${p.x + 0.5},${p.y + 0.5}`).join(' ')}
+                    fill="none"
+                    stroke="#201d4c"
+                    strokeWidth="0.1"
+                    strokeDasharray="0.2, 0.1"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="opacity-40"
+                  />
+               </svg>
+            )}
+
             {ghostRobot && (
-                <div className="absolute z-10 flex items-center justify-center pointer-events-none opacity-40 grayscale" style={{width:`${100/size}%`, height:`${100/size}%`, left:`${ghostRobot.x*(100/size)}%`, top:`${ghostRobot.y*(100/size)}%`, transition: 'all 0.3s ease'}}>
-                   <div className="w-[85%] h-[85%]" style={{transform: `rotate(${ghostRobot.dir*90}deg)`, transition: 'transform 0.3s ease'}}>{gameMode === 'mars' ? SVGS.rover : SVGS.car}</div>
+                <div className="absolute z-10 flex items-center justify-center pointer-events-none transition-all duration-300" style={{width:`${100/size}%`, height:`${100/size}%`, left:`${ghostRobot.x*(100/size)}%`, top:`${ghostRobot.y*(100/size)}%`}}>
+                   {/* Ghost Robot */}
+                   <div className="w-[85%] h-[85%] opacity-40 grayscale transition-transform duration-300" style={{transform: `rotate(${ghostRobot.dir*90}deg)`}}>
+                      {gameMode === 'mars' ? SVGS.rover : SVGS.car}
+                   </div>
                 </div>
             )}
 
